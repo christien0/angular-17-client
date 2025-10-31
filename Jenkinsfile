@@ -3,31 +3,34 @@ pipeline {
 
     environment {
         DOCKERHUB_CREDENTIALS = credentials('3bd8bf83-c1ec-4b92-b140-ff542d5c78c0')
-        APP_NAME = "todofront"  
+        APP_NAME = "todofront"
+        IMAGE_TAG = "latest"
     }
 
     stages { 
         stage('SCM Checkout') {
             steps {
-                git branch: 'main', url: ' https://github.com/christien0/angular-17-client.git'
+                git branch: 'main', url: 'https://github.com/christien0/angular-17-client.git'
             }
         }
-        
-        stage('Build docker image') {
+
+        stage('Build Docker Image') {
             steps {  
-                sh 'docker build -t $APP_NAME:$BUILD_NUMBER .'
+                bat 'docker build -t %APP_NAME%:%IMAGE_TAG% .'
             }
         }
-        
-        stage('login to dockerhub') {
+
+        stage('Login to Docker Hub') {
             steps {
-                sh 'echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin'
+                withCredentials([usernamePassword(credentialsId: '3bd8bf83-c1ec-4b92-b140-ff542d5c78c0', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    bat 'echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin'
+                }
             }
         }
-        
-         stage('push image') {
+
+        stage('Push Docker Image') {
             steps {
-                sh 'docker push $APP_NAME:$BUILD_NUMBER'
+                bat 'docker push %APP_NAME%:%IMAGE_TAG%'
             }
         }
     }
