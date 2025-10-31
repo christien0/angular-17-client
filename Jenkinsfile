@@ -2,7 +2,6 @@ pipeline {
     agent any 
 
     environment {
-        DOCKERHUB_CREDENTIALS = credentials('3bd8bf83-c1ec-4b92-b140-ff542d5c78c0')
         APP_NAME = "todofront"
         IMAGE_TAG = "latest"
     }
@@ -22,7 +21,11 @@ pipeline {
 
         stage('Login to Docker Hub') {
             steps {
-                withCredentials([usernamePassword(credentialsId: '3bd8bf83-c1ec-4b92-b140-ff542d5c78c0', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                // Securely inject Docker Hub username & token
+                withCredentials([usernamePassword(
+                    credentialsId: '3bd8bf83-c1ec-4b92-b140-ff542d5c78c0', 
+                    usernameVariable: 'DOCKER_USER', 
+                    passwordVariable: 'DOCKER_PASS')]) {
                     bat 'echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin'
                 }
             }
