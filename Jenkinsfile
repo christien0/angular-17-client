@@ -2,7 +2,7 @@ pipeline {
     agent any 
 
     environment {
-         DOCKER_USER = "christienmushoriwa" 
+        DOCKER_USER = "christienmushoriwa" 
         APP_NAME = "todofront"
         IMAGE_TAG = "latest"
     }
@@ -16,7 +16,7 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {  
-                bat 'docker build -t %APP_NAME%:%IMAGE_TAG% .'
+                bat 'docker build -t %DOCKER_USER%/%APP_NAME%:%IMAGE_TAG% .'
             }
         }
 
@@ -34,7 +34,7 @@ pipeline {
 
         stage('Push Docker Image') {
             steps {
-                bat 'docker push %APP_NAME%:%IMAGE_TAG%'
+                bat 'docker push %DOCKER_USER%/%APP_NAME%:%IMAGE_TAG%'
             }
         }
     }
