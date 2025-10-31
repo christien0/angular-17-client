@@ -2,6 +2,7 @@ pipeline {
     agent any 
 
     environment {
+         DOCKER_USER = "christienmushoriwa" 
         APP_NAME = "todofront"
         IMAGE_TAG = "latest"
     }
