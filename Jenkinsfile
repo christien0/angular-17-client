@@ -6,7 +6,7 @@ pipeline {
         APP_NAME = "todofront"
         IMAGE_TAG = "latest"
     }
-    trigger {
+    triggers {
         pollSCM('H/5 * * * *') 
     }
 
