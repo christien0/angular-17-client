@@ -6,6 +6,9 @@ pipeline {
         APP_NAME = "todofront"
         IMAGE_TAG = "latest"
     }
+    trigger {
+        pollSCM('H/5 * * * *') 
+    }
 
     stages { 
         stage('SCM Checkout') {
