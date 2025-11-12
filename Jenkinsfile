@@ -45,7 +45,7 @@ pipeline {
                 script {
                     // STEP 1: Clean up
                     bat '''
-                        echo "=== CLEANING UP ==="
+                        echo "=== STEP 1: CLEANING UP ==="
                         docker-compose -f docker-compose.test.yml down -v 2>nul || echo "Cleanup done"
                     '''
                     
@@ -67,28 +67,31 @@ services:
                     
                     // STEP 3: Start services
                     bat '''
-                        echo "=== STARTING SERVICES ==="
+                        echo "=== STEP 2: STARTING SERVICES ==="
                         docker pull christienmushoriwa/todoback:latest
                         docker-compose -f docker-compose.test.yml up -d
                     '''
                     
                     // STEP 4: Wait for services
                     bat '''
-                        echo "=== WAITING FOR SERVICES ==="
+                        echo "=== STEP 3: WAITING 30 SECONDS FOR SERVICES ==="
                         powershell -Command "Start-Sleep -Seconds 30"
                     '''
                     
                     // STEP 5: Check services
                     bat '''
-                        echo "=== CHECKING SERVICES ==="
+                        echo "=== STEP 4: CHECKING SERVICES ==="
+                        echo "Container status:"
                         docker ps
-                        curl -f http://localhost:8080/api/tutorials && echo "BACKEND OK" || echo "BACKEND FAILED"
-                        curl -f http://localhost:8081/tutorials && echo "FRONTEND OK" || echo "FRONTEND FAILED"
+                        echo "Testing backend..."
+                        curl -f http://localhost:8080/api/tutorials && echo "✓ BACKEND OK" || echo "✗ BACKEND FAILED"
+                        echo "Testing frontend..."
+                        curl -f http://localhost:8081/tutorials && echo "✓ FRONTEND OK" || echo "✗ FRONTEND FAILED"
                     '''
                     
                     // STEP 6: Run tests
                     bat '''
-                        echo "=== RUNNING PLAYWRIGHT TESTS ==="
+                        echo "=== STEP 5: RUNNING PLAYWRIGHT TESTS ==="
                         npx playwright install
                         npx playwright test test-1.spec.ts --reporter=list
                     '''
@@ -98,7 +101,7 @@ services:
                 always {
                     // STEP 7: Cleanup
                     bat '''
-                        echo "=== FINAL CLEANUP ==="
+                        echo "=== STEP 6: FINAL CLEANUP ==="
                         docker-compose -f docker-compose.test.yml down -v 2>nul || echo "Final cleanup done"
                     '''
                 }
