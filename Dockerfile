@@ -1,23 +1,16 @@
-# Multi-stage build: build Angular app with Node, serve with nginx
-
+# Stage 1: Build Angular app
 FROM node:18-alpine AS build
 WORKDIR /app
 
-# Install dependencies (no package-lock.json in repo, so use npm install)
 COPY package*.json ./
-RUN npm install --silent --no-audit --no-fund
+RUN npm ci --silent --no-audit --no-fund
 
-# Copy source and build
 COPY . .
 RUN npm run build -- --configuration production
 
-# Production image
+# Stage 2: Serve app with Nginx
 FROM nginx:stable-alpine
-
-# Copy built assets from builder
-COPY --from=build /app/dist/angular-17-crud /browser/index.html
-
-# Custom nginx config to support SPA routing
+COPY --from=build /app/dist/angular-17-crud/browser /usr/share/nginx/html
 COPY default.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
