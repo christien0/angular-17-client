@@ -43,15 +43,13 @@ pipeline {
         stage('Run Integration Tests') {
             steps {
                 script {
-                    // Clean up any existing containers
+                    // STEP 1: Clean up
                     bat '''
-                        echo "=== Cleaning up previous containers ==="
-                        docker-compose -f docker-compose.test.yml down -v 2>nul || echo "No previous containers"
-                        docker stop to-do-front-backend-1 to-do-front-frontend-1 2>nul || echo "No containers to stop"
-                        docker rm to-do-front-backend-1 to-do-front-frontend-1 2>nul || echo "No containers to remove"
+                        echo "=== CLEANING UP ==="
+                        docker-compose -f docker-compose.test.yml down -v 2>nul || echo "Cleanup done"
                     '''
                     
-                    // Create docker-compose file
+                    // STEP 2: Create docker-compose file
                     writeFile file: 'docker-compose.test.yml', text: """
 services:
   backend:
@@ -67,34 +65,30 @@ services:
       - backend
 """
                     
-                    // Start services in background
+                    // STEP 3: Start services
                     bat '''
-                        echo "=== Starting services ==="
+                        echo "=== STARTING SERVICES ==="
                         docker pull christienmushoriwa/todoback:latest
                         docker-compose -f docker-compose.test.yml up -d
                     '''
                     
-                    // Wait for Spring Boot to fully start
+                    // STEP 4: Wait for services
                     bat '''
-                        echo "=== Waiting 30 seconds for Spring Boot to fully start ==="
+                        echo "=== WAITING FOR SERVICES ==="
                         powershell -Command "Start-Sleep -Seconds 30"
                     '''
                     
-                    // Verify services are running
+                    // STEP 5: Check services
                     bat '''
-                        echo "=== Service Status ==="
+                        echo "=== CHECKING SERVICES ==="
                         docker ps
-                        echo.
-                        echo "=== Backend Check ==="
-                        curl -f http://localhost:8080/api/tutorials > nul && echo "✓ Backend API is working" || echo "✗ Backend API not working"
-                        echo.
-                        echo "=== Frontend Check ==="
-                        curl -f http://localhost:8081/tutorials > nul && echo "✓ Frontend is working" || echo "✗ Frontend not working"
+                        curl -f http://localhost:8080/api/tutorials && echo "BACKEND OK" || echo "BACKEND FAILED"
+                        curl -f http://localhost:8081/tutorials && echo "FRONTEND OK" || echo "FRONTEND FAILED"
                     '''
                     
-                    // Run Playwright tests
+                    // STEP 6: Run tests
                     bat '''
-                        echo "=== Running Playwright Tests ==="
+                        echo "=== RUNNING PLAYWRIGHT TESTS ==="
                         npx playwright install
                         npx playwright test test-1.spec.ts --reporter=list
                     '''
@@ -102,20 +96,11 @@ services:
             }
             post {
                 always {
-                    script {
-                        // Capture final logs for debugging
-                        bat '''
-                            echo "=== Final Logs ==="
-                            docker logs to-do-front-backend-1 --tail 50 2>nul || echo "No backend logs"
-                            docker logs to-do-front-frontend-1 --tail 50 2>nul || echo "No frontend logs"
-                        '''
-                        
-                        // Cleanup
-                        bat '''
-                            echo "=== Cleaning Up ==="
-                            docker-compose -f docker-compose.test.yml down -v 2>nul || echo "Cleanup completed"
-                        '''
-                    }
+                    // STEP 7: Cleanup
+                    bat '''
+                        echo "=== FINAL CLEANUP ==="
+                        docker-compose -f docker-compose.test.yml down -v 2>nul || echo "Final cleanup done"
+                    '''
                 }
             }
         }
