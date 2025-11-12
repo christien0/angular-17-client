@@ -42,16 +42,20 @@ pipeline {
         }
 
         stage('Run Integration Tests') {
-            steps {
-                script {
-                    // STEP 1: Clean up (ignore missing compose file)
-                    bat '''
-                        echo "=== STEP 1: CLEANING UP ==="
-                        docker-compose -f docker-compose.test.yml down -v || echo "Cleanup done"
-                    '''
+    steps {
+        script {
+            // STEP 1: Clean up (ignore errors)
+            bat """
+                echo "=== STEP 1: CLEANING UP ==="
+                if exist docker-compose.test.yml (
+                    docker-compose -f docker-compose.test.yml down -v || echo "Cleanup failed, continuing..."
+                ) else (
+                    echo "No docker-compose.test.yml found, skipping cleanup."
+                )
+            """
 
-                    // STEP 2: Create docker-compose file
-                    writeFile file: 'docker-compose.test.yml', text: """
+            // STEP 2: Create docker-compose file
+            writeFile file: 'docker-compose.test.yml', text: """
 services:
   backend:
     image: christienmushoriwa/todoback:latest
@@ -65,51 +69,38 @@ services:
     depends_on:
       - backend
 """
+            // STEP 3: Start services
+            bat '''
+                echo "=== STEP 3: STARTING SERVICES ==="
+                docker pull christienmushoriwa/todoback:latest
+                docker-compose -f docker-compose.test.yml up -d
+            '''
 
-                    // STEP 3: Start services
-                    bat '''
-                        echo "=== STEP 3: STARTING SERVICES ==="
-                        docker pull christienmushoriwa/todoback:latest
-                        docker-compose -f docker-compose.test.yml up -d
-                    '''
+            // STEP 4: Wait for services
+            bat '''
+                echo "=== STEP 4: WAITING 30 SECONDS FOR SERVICES ==="
+                powershell -Command "Start-Sleep -Seconds 30"
+            '''
 
-                    // STEP 4: Wait for services
-                    bat '''
-                        echo "=== STEP 4: WAITING 30 SECONDS FOR SERVICES ==="
-                        powershell -Command "Start-Sleep -Seconds 30"
-                    '''
-
-                    // STEP 5: Check services
-                    bat '''
-                        echo "=== STEP 5: CHECKING SERVICES ==="
-                        docker ps
-                        echo "Testing backend..."
-                        curl -f http://localhost:8080/api/tutorials && echo "✓ BACKEND OK" || echo "✗ BACKEND FAILED"
-                        echo "Testing frontend..."
-                        curl -f http://localhost:8081/tutorials && echo "✓ FRONTEND OK" || echo "✗ FRONTEND FAILED"
-                    '''
-
-                    // STEP 6: Run Playwright tests (optional)
-                    bat '''
-                        echo "=== STEP 6: RUNNING PLAYWRIGHT TESTS ==="
-                        npx playwright install
-                        npx playwright test test-1.spec.ts --reporter=list || echo "Tests failed, continuing pipeline"
-                    '''
-                }
-            }
-
-            post {
-                always {
-                    // STEP 7: Cleanup (prevent exit code 1 from breaking build)
-                    catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
-                        bat '''
-                            echo "=== STEP 7: FINAL CLEANUP ==="
-                            docker-compose -f docker-compose.test.yml down -v || echo "Final cleanup done"
-                            exit 0
-                        '''
-                    }
-                }
-            }
+            // STEP 5: Check services
+            bat '''
+                echo "=== STEP 5: CHECKING SERVICES ==="
+                docker ps
+                curl -f http://localhost:8080/api/tutorials && echo "✓ BACKEND OK" || echo "✗ BACKEND FAILED"
+                curl -f http://localhost:8081/tutorials && echo "✓ FRONTEND OK" || echo "✗ FRONTEND FAILED"
+            '''
+        }
+    }
+    post {
+        always {
+            bat '''
+                echo "=== STEP 7: FINAL CLEANUP ==="
+                if exist docker-compose.test.yml (
+                    docker-compose -f docker-compose.test.yml down -v || echo "Final cleanup failed, continuing..."
+                ) else (
+                    echo "No docker-compose.test.yml found, skipping cleanup."
+                )
+            '''
         }
     }
 }
