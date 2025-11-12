@@ -72,7 +72,7 @@ services:
                         docker-compose -f docker-compose.test.yml up -d
                     '''
                     
-                    // Wait for Spring Boot to fully start (we saw it takes ~12 seconds)
+                    // Wait for Spring Boot to fully start
                     bat '''
                         echo "Waiting 25 seconds for Spring Boot to fully start..."
                         powershell -Command "Start-Sleep -Seconds 25"
