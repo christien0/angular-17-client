@@ -5,6 +5,7 @@ pipeline {
         DOCKER_USER = "christienmushoriwa" 
         APP_NAME = "todofront"
         IMAGE_TAG = "latest"
+        CONTAINER_SUFFIX = "${env.BUILD_NUMBER}"
     }
     triggers {
         pollSCM('H/5 * * * *') 
@@ -46,58 +47,80 @@ pipeline {
                     // Pull backend image first
                     bat 'docker pull christienmushoriwa/todoback:latest || echo "Backend image pull failed, but continuing"'
                     
-                    // Create docker-compose with different ports
+                    // Use simple container names without special characters
+                    def backendContainer = "backend-test-${env.BUILD_NUMBER}"
+                    def frontendContainer = "frontend-test-${env.BUILD_NUMBER}"
+                    
+                    // Create docker-compose without version and with simple container names
                     writeFile file: 'docker-compose.test.yml', text: """
-version: '3.8'
 services:
   backend:
     image: christienmushoriwa/todoback:latest
-    container_name: backend-test-%BUILD_NUMBER%
+    container_name: backend-test-${env.BUILD_NUMBER}
     ports:
       - "18080:8080"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/tutorials"]
-      interval: 10s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
 
   frontend:
     image: christienmushoriwa/todofront:latest
-    container_name: frontend-test-%BUILD_NUMBER%
+    container_name: frontend-test-${env.BUILD_NUMBER}
     ports:
       - "18081:80"
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
 """
                     
                     // Start backend and frontend
                     bat 'docker-compose -f docker-compose.test.yml up -d'
                     
-                    // Windows-compatible health check wait
+                    // Wait for services to start
+                    bat 'timeout /t 30 /nobreak > nul'
+                    
+                    // Check if backend is running
                     bat """
-                        echo Waiting for backend to be healthy...
+                        echo Checking if backend is running...
+                        docker ps | find "backend-test-${env.BUILD_NUMBER}" > nul
+                        if %errorlevel% neq 0 (
+                            echo Backend container is not running!
+                            docker logs backend-test-${env.BUILD_NUMBER} 2>nul || echo Cannot get backend logs
+                            exit 1
+                        )
+                    """
+                    
+                    // Check if frontend is running
+                    bat """
+                        echo Checking if frontend is running...
+                        docker ps | find "frontend-test-${env.BUILD_NUMBER}" > nul
+                        if %errorlevel% neq 0 (
+                            echo Frontend container is not running!
+                            docker logs frontend-test-${env.BUILD_NUMBER} 2>nul || echo Cannot get frontend logs
+                            exit 1
+                        )
+                    """
+                    
+                    // Wait for backend API to be ready
+                    bat """
+                        echo Waiting for backend API to be ready...
                         set MAX_RETRIES=12
                         set RETRY_COUNT=0
                         :RETRY_BACKEND
-                        docker inspect --format="{{.State.Health.Status}}" backend-test-%BUILD_NUMBER% | find "healthy" > nul
+                        curl -f http://localhost:18080/api/tutorials > nul 2>&1
                         if %errorlevel% equ 0 (
-                            echo Backend is healthy!
-                            goto BACKEND_HEALTHY
+                            echo Backend API is ready!
+                            goto BACKEND_READY
                         )
                         set /a RETRY_COUNT+=1
-                        if %RETRY_COUNT% geq %MAX_RETRIES% (
-                            echo Backend health check timeout after 120 seconds
+                        if !RETRY_COUNT! geq !MAX_RETRIES! (
+                            echo Backend API not ready after 120 seconds
+                            docker logs backend-test-${env.BUILD_NUMBER}
                             exit 1
                         )
-                        echo Backend not ready yet, waiting 10 seconds... (Attempt %RETRY_COUNT%/%MAX_RETRIES%)
+                        echo Backend API not ready yet, waiting 10 seconds... (Attempt !RETRY_COUNT!/!MAX_RETRIES!)
                         timeout /t 10 /nobreak > nul
                         goto RETRY_BACKEND
-                        :BACKEND_HEALTHY
+                        :BACKEND_READY
                     """
                     
-                    // Wait for frontend to be accessible
+                    // Wait for frontend to be ready
                     bat """
                         echo Waiting for frontend to be ready...
                         set MAX_RETRIES=12
@@ -109,40 +132,49 @@ services:
                             goto FRONTEND_READY
                         )
                         set /a RETRY_COUNT+=1
-                        if %RETRY_COUNT% geq %MAX_RETRIES% (
-                            echo Frontend readiness check timeout after 120 seconds
+                        if !RETRY_COUNT! geq !MAX_RETRIES! (
+                            echo Frontend not ready after 120 seconds
+                            docker logs frontend-test-${env.BUILD_NUMBER}
                             exit 1
                         )
-                        echo Frontend not ready yet, waiting 10 seconds... (Attempt %RETRY_COUNT%/%MAX_RETRIES%)
+                        echo Frontend not ready yet, waiting 10 seconds... (Attempt !RETRY_COUNT!/!MAX_RETRIES!)
                         timeout /t 10 /nobreak > nul
                         goto RETRY_FRONTEND
                         :FRONTEND_READY
                     """
                     
+                    // Create test directory if it doesn't exist and copy test file
+                    bat '''
+                        if not exist e2e mkdir e2e
+                        copy test-1.spec.ts e2e\\test-ci.spec.ts || echo "Test file copy failed"
+                    '''
+                    
                     // Modify test file to use new port (18081 instead of 8081)
                     bat '''
-                        copy test-1.spec.ts test-ci.spec.ts
-                        powershell -Command "(Get-Content test-ci.spec.ts) -replace '8081', '18081' | Set-Content test-ci.spec.ts"
+                        powershell -Command "(Get-Content e2e/test-ci.spec.ts) -replace '8081', '18081' | Set-Content e2e/test-ci.spec.ts"
                     '''
                     
                     // Install and run Playwright tests
                     bat '''
-                        call npx playwright install
-                        call npx playwright test test-ci.spec.ts --reporter=list
+                        npx playwright install
+                        npx playwright test e2e/test-ci.spec.ts --reporter=list
                     '''
                 }
             }
             post {
                 always {
-                    // Capture logs for debugging
-                    bat 'docker logs backend-test-%BUILD_NUMBER% > backend-logs.txt 2>&1 || echo "Could not get backend logs"'
-                    bat 'docker logs frontend-test-%BUILD_NUMBER% > frontend-logs.txt 2>&1 || echo "Could not get frontend logs"'
-                    bat 'type backend-logs.txt'
-                    bat 'type frontend-logs.txt'
-                    
-                    // Cleanup
-                    bat 'docker-compose -f docker-compose.test.yml down -v'
-                    bat 'docker system prune -f'
+                    script {
+                        // Capture logs for debugging
+                        bat "docker logs backend-test-${env.BUILD_NUMBER} > backend-logs.txt 2>&1 || echo Could not get backend logs"
+                        bat "docker logs frontend-test-${env.BUILD_NUMBER} > frontend-logs.txt 2>&1 || echo Could not get frontend logs"
+                        
+                        // Print logs to console
+                        bat 'type backend-logs.txt 2>nul || echo No backend logs available'
+                        bat 'type frontend-logs.txt 2>nul || echo No frontend logs available'
+                        
+                        // Cleanup
+                        bat 'docker-compose -f docker-compose.test.yml down -v 2>nul || echo Cleanup failed'
+                    }
                 }
             }
         }
