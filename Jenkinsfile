@@ -45,6 +45,7 @@ pipeline {
                 script {
                     // Clean up any existing containers
                     bat '''
+                        echo "=== Cleaning up previous containers ==="
                         docker-compose -f docker-compose.test.yml down -v 2>nul || echo "No previous containers"
                         docker stop to-do-front-backend-1 to-do-front-frontend-1 2>nul || echo "No containers to stop"
                         docker rm to-do-front-backend-1 to-do-front-frontend-1 2>nul || echo "No containers to remove"
@@ -68,14 +69,15 @@ services:
                     
                     // Start services in background
                     bat '''
-                        echo "Starting services..."
+                        echo "=== Starting services ==="
+                        docker pull christienmushoriwa/todoback:latest
                         docker-compose -f docker-compose.test.yml up -d
                     '''
                     
                     // Wait for Spring Boot to fully start
                     bat '''
-                        echo "Waiting 25 seconds for Spring Boot to fully start..."
-                        powershell -Command "Start-Sleep -Seconds 25"
+                        echo "=== Waiting 30 seconds for Spring Boot to fully start ==="
+                        powershell -Command "Start-Sleep -Seconds 30"
                     '''
                     
                     // Verify services are running
@@ -84,10 +86,10 @@ services:
                         docker ps
                         echo.
                         echo "=== Backend Check ==="
-                        curl -s http://localhost:8080/api/tutorials > nul && echo "✓ Backend API is working" || echo "✗ Backend API not working"
+                        curl -f http://localhost:8080/api/tutorials > nul && echo "✓ Backend API is working" || echo "✗ Backend API not working"
                         echo.
                         echo "=== Frontend Check ==="
-                        curl -s http://localhost:8081/tutorials > nul && echo "✓ Frontend is working" || echo "✗ Frontend not working"
+                        curl -f http://localhost:8081/tutorials > nul && echo "✓ Frontend is working" || echo "✗ Frontend not working"
                     '''
                     
                     // Run Playwright tests
@@ -104,8 +106,8 @@ services:
                         // Capture final logs for debugging
                         bat '''
                             echo "=== Final Logs ==="
-                            docker logs to-do-front-backend-1 --tail 20 2>nul || echo "No backend logs"
-                            docker logs to-do-front-frontend-1 --tail 20 2>nul || echo "No frontend logs"
+                            docker logs to-do-front-backend-1 --tail 50 2>nul || echo "No backend logs"
+                            docker logs to-do-front-frontend-1 --tail 50 2>nul || echo "No frontend logs"
                         '''
                         
                         // Cleanup
