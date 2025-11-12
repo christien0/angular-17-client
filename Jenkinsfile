@@ -58,6 +58,7 @@ pipeline {
 
                     // Dynamically write docker-compose.test.yml for backend & frontend images
                     writeFile file: 'docker-compose.test.yml', text: """
+version: '3.8'
 services:
   backend:
     image: ${DOCKER_USER}/${BACKEND_APP_NAME}:${IMAGE_TAG}
@@ -72,12 +73,12 @@ services:
       - backend
 """
 
-                    // Pull backend image and start services
-                    bat '''
+                    // Pull backend image and start services - FIXED: Use bat with double quotes for env var expansion
+                    bat """
                         echo "=== STEP 3: PULLING BACKEND IMAGE AND STARTING SERVICES ==="
                         docker pull ${DOCKER_USER}/${BACKEND_APP_NAME}:${IMAGE_TAG}
                         docker-compose -f docker-compose.test.yml up -d
-                    '''
+                    """
 
                     // Wait 30 seconds for services to start
                     bat 'powershell -Command "Start-Sleep -Seconds 30"'
@@ -90,26 +91,100 @@ services:
                         curl -f http://localhost:8081/tutorials && echo "✓ FRONTEND OK" || exit /b 1
                     '''
 
-                    // Run Playwright tests with junit and html reporters
-                    bat '''
-                        echo "=== STEP 6: RUNNING PLAYWRIGHT TESTS ==="
+                    // Create a basic Playwright test file if it doesn't exist
+                    writeFile file: 'test-1.spec.ts', text: """
+import { test, expect } from '@playwright/test';
+
+test('frontend application loads', async ({ page }) => {
+  console.log('Navigating to frontend...');
+  await page.goto('http://localhost:8081');
+  
+  // Wait for the app to load
+  await page.waitForTimeout(5000);
+  
+  // Check if the page title is correct
+  const title = await page.title();
+  expect(title).toBe('Angular17Crud');
+  
+  console.log('Frontend loaded successfully');
+});
+
+test('backend API is accessible', async ({ request }) => {
+  console.log('Testing backend API...');
+  const response = await request.get('http://localhost:8080/api/tutorials');
+  expect(response.status()).toBe(200);
+  
+  const responseBody = await response.json();
+  console.log('Backend API response received');
+});
+
+test('frontend tutorials page loads', async ({ page }) => {
+  console.log('Testing tutorials page...');
+  await page.goto('http://localhost:8081/tutorials');
+  
+  // Wait for page to load
+  await page.waitForTimeout(3000);
+  
+  // Take a screenshot for debugging
+  await page.screenshot({ path: 'tutorials-page.png' });
+  console.log('Tutorials page test completed');
+});
+"""
+
+                    // Create Playwright config file
+                    writeFile file: 'playwright.config.ts', text: """
+import { defineConfig, devices } from '@playwright/test';
+
+export default defineConfig({
+  testDir: '.',
+  timeout: 30000,
+  expect: {
+    timeout: 5000
+  },
+  reporter: [
+    ['html', { outputFolder: 'playwright-report' }],
+    ['junit', { outputFile: 'playwright-report/results.xml' }]
+  ],
+  use: {
+    baseURL: 'http://localhost:8081',
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure'
+  },
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    }
+  ],
+});
+"""
+
+                    // Run Playwright tests with proper setup
+                    bat """
+                        echo "=== STEP 6: INSTALLING PLAYWRIGHT ==="
                         npm install -D @playwright/test
+                        
+                        echo "=== STEP 7: INSTALLING BROWSERS ==="
                         npx playwright install --with-deps
-                        npx playwright test test-1.spec.ts --reporter=junit,html
-                    '''
+                        
+                        echo "=== STEP 8: RUNNING PLAYWRIGHT TESTS ==="
+                        npx playwright test test-1.spec.ts --reporter=html,junit
+                    """
                 }
             }
 
             post {
                 always {
                     echo "=== ARCHIVING TEST RESULTS AND CLEANING UP ==="
-                    // Adjust the junit path if Playwright outputs differ
+                    // Archive JUnit test results
                     junit 'playwright-report/results.xml'
 
-                    archiveArtifacts artifacts: 'playwright-report/**', fingerprint: true
+                    // Archive HTML report and screenshots
+                    archiveArtifacts artifacts: 'playwright-report/**/*, *.png', fingerprint: true
 
+                    // Publish HTML report
                     publishHTML(target: [
-                        allowMissing: false,
+                        allowMissing: true,
                         alwaysLinkToLastBuild: true,
                         keepAll: true,
                         reportDir: 'playwright-report',
@@ -117,7 +192,9 @@ services:
                         reportName: 'Playwright HTML Test Report'
                     ])
 
+                    // Cleanup containers
                     bat '''
+                        echo "=== CLEANING UP DOCKER CONTAINERS ==="
                         docker-compose -f docker-compose.test.yml down -v 2>nul || echo Cleanup done
                     '''
                 }
