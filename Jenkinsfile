@@ -67,20 +67,20 @@ services:
                     
                     // STEP 3: Start services
                     bat '''
-                        echo "=== STEP 2: STARTING SERVICES ==="
+                        echo "=== STEP 3: STARTING SERVICES ==="
                         docker pull christienmushoriwa/todoback:latest
                         docker-compose -f docker-compose.test.yml up -d
                     '''
                     
                     // STEP 4: Wait for services
                     bat '''
-                        echo "=== STEP 3: WAITING 30 SECONDS FOR SERVICES ==="
+                        echo "=== STEP 4: WAITING 30 SECONDS FOR SERVICES ==="
                         powershell -Command "Start-Sleep -Seconds 30"
                     '''
                     
                     // STEP 5: Check services
                     bat '''
-                        echo "=== STEP 4: CHECKING SERVICES ==="
+                        echo "=== STEP 5: CHECKING SERVICES ==="
                         echo "Container status:"
                         docker ps
                         echo "Testing backend..."
@@ -91,7 +91,7 @@ services:
                     
                     // STEP 6: Run tests
                     bat '''
-                        echo "=== STEP 5: RUNNING PLAYWRIGHT TESTS ==="
+                        echo "=== STEP 6: RUNNING PLAYWRIGHT TESTS ==="
                         npx playwright install
                         npx playwright test test-1.spec.ts --reporter=list
                     '''
@@ -101,7 +101,7 @@ services:
                 always {
                     // STEP 7: Cleanup
                     bat '''
-                        echo "=== STEP 6: FINAL CLEANUP ==="
+                        echo "=== STEP 7: FINAL CLEANUP ==="
                         docker-compose -f docker-compose.test.yml down -v 2>nul || echo "Final cleanup done"
                     '''
                 }
