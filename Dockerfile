@@ -15,7 +15,7 @@ RUN npm run build -- --configuration production
 FROM nginx:stable-alpine
 
 # Copy built assets from builder
-COPY --from=build /app/dist/angular-17-crud /usr/share/nginx/html
+COPY --from=build /app/dist/angular-17-crud /browser/index.html
 
 # Custom nginx config to support SPA routing
 COPY default.conf /etc/nginx/conf.d/default.conf

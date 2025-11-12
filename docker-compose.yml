@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  backend:
+    image: christienmushoriwa/todoback:latest
+    ports:
+      - "8080:8080"
+
+  frontend:
+    image: christienmushoriwa/todofront:latest
+    ports:
+      - "4200:80"
+    depends_on:
+      - backend
