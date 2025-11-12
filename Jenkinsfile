@@ -1,26 +1,26 @@
 pipeline {
-    agent any
+    agent any 
 
     environment {
-        DOCKER_USER = "christienmushoriwa"
+        DOCKER_USER = "christienmushoriwa" 
         APP_NAME = "todofront"
         IMAGE_TAG = "latest"
     }
 
     triggers {
-        pollSCM('H/5 * * * *')
+        pollSCM('H/5 * * * *') 
     }
 
-    stages {
+    stages { 
         stage('SCM Checkout') {
             steps {
-                echo "=== CHECKING OUT SOURCE CODE ==="
+                echo "=== CHECKING OUT FRONTEND SOURCE CODE ==="
                 git branch: 'main', url: 'https://github.com/christien0/angular-17-client.git'
             }
         }
 
-        stage('Build Docker Image') {
-            steps {
+        stage('Build Frontend Docker Image') {
+            steps {  
                 echo "=== BUILDING FRONTEND DOCKER IMAGE ==="
                 bat 'docker build -t %DOCKER_USER%/%APP_NAME%:%IMAGE_TAG% .'
             }
@@ -30,17 +30,17 @@ pipeline {
             steps {
                 echo "=== LOGGING INTO DOCKER HUB ==="
                 withCredentials([usernamePassword(
-                    credentialsId: '0a380709-8b0b-433e-8371-0710dada08be',
-                    usernameVariable: 'DOCKER_USER',
+                    credentialsId: '0a380709-8b0b-433e-8371-0710dada08be', 
+                    usernameVariable: 'DOCKER_USER', 
                     passwordVariable: 'DOCKER_PASS')]) {
                     bat 'echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin'
                 }
             }
         }
 
-        stage('Push Docker Image') {
+        stage('Push Frontend Docker Image') {
             steps {
-                echo "=== PUSHING IMAGE TO DOCKER HUB ==="
+                echo "=== PUSHING FRONTEND IMAGE TO DOCKER HUB ==="
                 bat 'docker push %DOCKER_USER%/%APP_NAME%:%IMAGE_TAG%'
             }
         }
@@ -48,13 +48,7 @@ pipeline {
         stage('Run Integration & Regression Tests') {
             steps {
                 script {
-                    // Step 1: Cleanup
-                    bat '''
-                        echo "=== STEP 1: CLEANING UP OLD CONTAINERS ==="
-                        docker-compose -f docker-compose.test.yml down -v 2>nul || echo "Cleanup done"
-                    '''
-
-                    // Step 2: Write docker-compose.test.yml dynamically
+                    // Write docker-compose file dynamically for tests
                     writeFile file: 'docker-compose.test.yml', text: """
 services:
   backend:
@@ -70,56 +64,35 @@ services:
       - backend
 """
 
-                    // Step 3: Start containers
+                    // Bring up backend and frontend from images
                     bat '''
-                        echo "=== STEP 3: PULLING IMAGES AND STARTING SERVICES ==="
                         docker pull christienmushoriwa/todoback:latest
+                        docker pull christienmushoriwa/todofront:latest
                         docker-compose -f docker-compose.test.yml up -d
                     '''
 
-                    // Step 4: Wait for startup
+                    // Wait for services to be ready
+                    bat 'powershell -Command "Start-Sleep -Seconds 30"'
+
+                    // Check backend and frontend health
                     bat '''
-                        echo "=== STEP 4: WAITING 30 SECONDS FOR SERVICES TO INITIALIZE ==="
-                        powershell -Command "Start-Sleep -Seconds 30"
+                        curl -f http://localhost:8080/api/tutorials && echo Backend is up || exit /b 1
+                        curl -f http://localhost:8081/tutorials && echo Frontend is up || exit /b 1
                     '''
 
-                    // Step 5: Verify service availability
+                    // Run Playwright tests
                     bat '''
-                        echo "=== STEP 5: VERIFYING SERVICES ==="
-                        docker ps
-                        curl -f http://localhost:8080/api/tutorials && echo "✓ BACKEND OK" || exit /b 1
-                        curl -f http://localhost:8081/tutorials && echo "✓ FRONTEND OK" || exit /b 1
-                    '''
-
-                    // Step 6: Run Playwright regression tests with reporters
-                    bat '''
-                        echo "=== STEP 6: RUNNING PLAYWRIGHT TESTS WITH REPORTERS ==="
                         npm install -D @playwright/test
                         npx playwright install --with-deps
-                        npx playwright test test-1.spec.ts --reporter=junit,html
+                        npx playwright test test-1.spec.ts --reporter=list
                     '''
                 }
             }
 
             post {
                 always {
-                    // Step 7: Archive and publish test results, then cleanup
-                    junit 'playwright-report/results.xml'
-
-                    archiveArtifacts artifacts: 'playwright-report/**', fingerprint: true
-
-                    publishHTML(target: [
-                        allowMissing: false,
-                        alwaysLinkToLastBuild: true,
-                        keepAll: true,
-                        reportDir: 'playwright-report',
-                        reportFiles: 'index.html',
-                        reportName: 'Playwright HTML Test Report'
-                    ])
-
                     bat '''
-                        echo "=== STEP 8: CLEANING UP SERVICES ==="
-                        docker-compose -f docker-compose.test.yml down -v 2>nul || echo "Cleanup done"
+                        docker-compose -f docker-compose.test.yml down -v || echo Cleanup done
                     '''
                 }
             }
