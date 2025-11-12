@@ -2,33 +2,37 @@ pipeline {
     agent any 
 
     environment {
-        DOCKER_USER = "christienmushoriwa"
+        DOCKER_USER = "christienmushoriwa" 
         APP_NAME = "todofront"
         IMAGE_TAG = "latest"
     }
 
     triggers {
-        pollSCM('H/5 * * * *')
+        // Poll GitHub every 5 minutes for changes
+        pollSCM('H/5 * * * *') 
     }
 
-    stages {
+    stages { 
         stage('SCM Checkout') {
             steps {
+                echo "=== CHECKING OUT SOURCE CODE ==="
                 git branch: 'main', url: 'https://github.com/christien0/angular-17-client.git'
             }
         }
 
         stage('Build Docker Image') {
-            steps {
+            steps {  
+                echo "=== BUILDING FRONTEND DOCKER IMAGE ==="
                 bat 'docker build -t %DOCKER_USER%/%APP_NAME%:%IMAGE_TAG% .'
             }
         }
 
         stage('Login to Docker Hub') {
             steps {
+                echo "=== LOGGING INTO DOCKER HUB ==="
                 withCredentials([usernamePassword(
-                    credentialsId: '0a380709-8b0b-433e-8371-0710dada08be',
-                    usernameVariable: 'DOCKER_USER',
+                    credentialsId: '0a380709-8b0b-433e-8371-0710dada08be', 
+                    usernameVariable: 'DOCKER_USER', 
                     passwordVariable: 'DOCKER_PASS')]) {
                     bat 'echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin'
                 }
@@ -37,24 +41,21 @@ pipeline {
 
         stage('Push Docker Image') {
             steps {
+                echo "=== PUSHING IMAGE TO DOCKER HUB ==="
                 bat 'docker push %DOCKER_USER%/%APP_NAME%:%IMAGE_TAG%'
             }
         }
 
-        stage('Run Integration Tests') {
+        stage('Run Integration & Regression Tests') {
             steps {
                 script {
-                    // STEP 1: Clean up (ignore errors)
-                    bat """
-                        echo "=== STEP 1: CLEANING UP ==="
-                        if exist docker-compose.test.yml (
-                            docker-compose -f docker-compose.test.yml down -v || echo "Cleanup failed, continuing..."
-                        ) else (
-                            echo "No docker-compose.test.yml found, skipping cleanup."
-                        )
-                    """
-
-                    // STEP 2: Create docker-compose file
+                    // STEP 1: Cleanup
+                    bat '''
+                        echo "=== STEP 1: CLEANING UP ANY OLD CONTAINERS ==="
+                        docker-compose -f docker-compose.test.yml down -v 2>nul || echo "Cleanup done"
+                    '''
+                    
+                    // STEP 2: Write docker-compose test file dynamically
                     writeFile file: 'docker-compose.test.yml', text: """
 services:
   backend:
@@ -70,40 +71,48 @@ services:
       - backend
 """
 
-                    // STEP 3: Start services
+                    // STEP 3: Start containers
                     bat '''
-                        echo "=== STEP 3: STARTING SERVICES ==="
+                        echo "=== STEP 3: STARTING BACKEND & FRONTEND SERVICES ==="
                         docker pull christienmushoriwa/todoback:latest
                         docker-compose -f docker-compose.test.yml up -d
                     '''
-
-                    // STEP 4: Wait for services
+                    
+                    // STEP 4: Wait for startup
                     bat '''
-                        echo "=== STEP 4: WAITING 30 SECONDS FOR SERVICES ==="
+                        echo "=== STEP 4: WAITING 30 SECONDS FOR SERVICES TO INITIALIZE ==="
                         powershell -Command "Start-Sleep -Seconds 30"
                     '''
-
-                    // STEP 5: Check services
+                    
+                    // STEP 5: Verify both containers are healthy
                     bat '''
-                        echo "=== STEP 5: CHECKING SERVICES ==="
+                        echo "=== STEP 5: VERIFYING SERVICE AVAILABILITY ==="
                         docker ps
-                        curl -f http://localhost:8080/api/tutorials && echo "✓ BACKEND OK" || echo "✗ BACKEND FAILED"
-                        curl -f http://localhost:8081/tutorials && echo "✓ FRONTEND OK" || echo "✗ FRONTEND FAILED"
+                        echo "Testing backend..."
+                        curl -f http://localhost:8080/api/tutorials && echo "✓ BACKEND OK" || exit /b 1
+                        echo "Testing frontend..."
+                        curl -f http://localhost:8081/tutorials && echo "✓ FRONTEND OK" || exit /b 1
+                    '''
+                    
+                    // STEP 6: Run Playwright regression tests
+                    bat '''
+                        echo "=== STEP 6: RUNNING PLAYWRIGHT REGRESSION TESTS ==="
+                        npm install -D @playwright/test
+                        npx playwright install --with-deps
+                        npx playwright test test-1.spec.ts --reporter=list
                     '''
                 }
             }
+
             post {
                 always {
+                    // STEP 7: Cleanup after tests
                     bat '''
                         echo "=== STEP 7: FINAL CLEANUP ==="
-                        if exist docker-compose.test.yml (
-                            docker-compose -f docker-compose.test.yml down -v || echo "Final cleanup failed, continuing..."
-                        ) else (
-                            echo "No docker-compose.test.yml found, skipping cleanup."
-                        )
+                        docker-compose -f docker-compose.test.yml down -v 2>nul || echo "Cleanup done"
                     '''
                 }
             }
-        } // ← closes the Run Integration Tests stage
-    } // ← closes stages
-} // ← closes pipeline
+        }
+    }
+}
