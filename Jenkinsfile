@@ -43,9 +43,11 @@ pipeline {
         stage('Run Integration Tests') {
             steps {
                 script {
-                    // Clean up any existing test containers
+                    // Clean up any existing containers
                     bat '''
-                        docker-compose -f docker-compose.test.yml down -v 2>nul || echo "Cleanup completed"
+                        docker-compose -f docker-compose.test.yml down -v 2>nul || echo "No previous containers"
+                        docker stop to-do-front-backend-1 to-do-front-frontend-1 2>nul || echo "No containers to stop"
+                        docker rm to-do-front-backend-1 to-do-front-frontend-1 2>nul || echo "No containers to remove"
                     '''
                     
                     // Create docker-compose file
@@ -64,24 +66,33 @@ services:
       - backend
 """
                     
-                    // Pull backend and start services
+                    // Start services in background
                     bat '''
-                        docker pull christienmushoriwa/todoback:latest
+                        echo "Starting services..."
                         docker-compose -f docker-compose.test.yml up -d
                     '''
                     
-                    // Wait for Spring Boot to fully start (it takes ~10 seconds)
-                    bat 'powershell -Command "Write-Host ''Waiting 20 seconds for Spring Boot...''; Start-Sleep -Seconds 20"'
-                    
-                    // Quick health check
+                    // Wait for Spring Boot to fully start (we saw it takes ~12 seconds)
                     bat '''
-                        echo "=== Health Check ==="
-                        curl -s http://localhost:8080/api/tutorials > nul && echo "✓ Backend ready" || echo "✗ Backend not ready"
-                        curl -s http://localhost:8081/tutorials > nul && echo "✓ Frontend ready" || echo "✗ Frontend not ready"
+                        echo "Waiting 25 seconds for Spring Boot to fully start..."
+                        powershell -Command "Start-Sleep -Seconds 25"
+                    '''
+                    
+                    // Verify services are running
+                    bat '''
+                        echo "=== Service Status ==="
+                        docker ps
+                        echo.
+                        echo "=== Backend Check ==="
+                        curl -s http://localhost:8080/api/tutorials > nul && echo "✓ Backend API is working" || echo "✗ Backend API not working"
+                        echo.
+                        echo "=== Frontend Check ==="
+                        curl -s http://localhost:8081/tutorials > nul && echo "✓ Frontend is working" || echo "✗ Frontend not working"
                     '''
                     
                     // Run Playwright tests
                     bat '''
+                        echo "=== Running Playwright Tests ==="
                         npx playwright install
                         npx playwright test test-1.spec.ts --reporter=list
                     '''
@@ -89,10 +100,20 @@ services:
             }
             post {
                 always {
-                    // Cleanup
-                    bat '''
-                        docker-compose -f docker-compose.test.yml down -v 2>nul || echo "Cleanup completed"
-                    '''
+                    script {
+                        // Capture final logs for debugging
+                        bat '''
+                            echo "=== Final Logs ==="
+                            docker logs to-do-front-backend-1 --tail 20 2>nul || echo "No backend logs"
+                            docker logs to-do-front-frontend-1 --tail 20 2>nul || echo "No frontend logs"
+                        '''
+                        
+                        // Cleanup
+                        bat '''
+                            echo "=== Cleaning Up ==="
+                            docker-compose -f docker-compose.test.yml down -v 2>nul || echo "Cleanup completed"
+                        '''
+                    }
                 }
             }
         }
