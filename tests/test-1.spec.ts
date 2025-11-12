@@ -1,0 +1,36 @@
+import { test, expect } from '@playwright/test';
+
+test('test', async ({ page }) => {
+  await page.goto('http://localhost:8081/tutorials');
+  await page.getByRole('link', { name: 'Add' }).click();
+  await page.getByRole('textbox', { name: 'Title' }).click();
+  await page.getByRole('textbox', { name: 'Title' }).fill('Run test');
+  await page.getByRole('textbox', { name: 'Description' }).click();
+  await page.getByRole('textbox', { name: 'Description' }).fill('use playwright, submit');
+  await page.getByRole('button', { name: 'Submit' }).click();
+  await page.getByRole('button', { name: 'Add' }).click();
+  await page.getByRole('textbox', { name: 'Title' }).click();
+  await page.getByRole('textbox', { name: 'Title' }).fill('create a clean UI');
+  await page.getByRole('textbox', { name: 'Description' }).click();
+  await page.getByRole('textbox', { name: 'Description' }).fill('use scss, js or ts');
+  await page.getByRole('button', { name: 'Submit' }).click();
+  await page.getByRole('link', { name: 'Tutorials' }).click();
+  await page.getByText('Clean room').click();
+  await page.getByRole('link', { name: 'Edit' }).click();
+  await page.getByRole('textbox', { name: 'Description' }).click();
+  await page.getByRole('textbox', { name: 'Description' }).press('ArrowLeft');
+  await page.getByRole('textbox', { name: 'Description' }).press('ArrowLeft');
+  await page.getByRole('textbox', { name: 'Description' }).press('ArrowLeft');
+  await page.getByRole('textbox', { name: 'Description' }).press('ArrowLeft');
+  await page.getByRole('textbox', { name: 'Description' }).press('ArrowLeft');
+  await page.getByRole('textbox', { name: 'Description' }).press('ArrowLeft');
+  await page.getByRole('textbox', { name: 'Description' }).press('ArrowLeft');
+  await page.getByRole('textbox', { name: 'Description' }).press('ArrowLeft');
+  await page.getByRole('textbox', { name: 'Description' }).fill('bed and laundry');
+  await page.getByRole('button', { name: 'Update' }).click();
+  await expect(page.getByRole('paragraph')).toContainText('This tutorial was updated successfully!');
+  await page.getByRole('link', { name: 'Tutorials' }).click();
+  await page.getByText('Run test').click();
+  await page.getByRole('link', { name: 'Edit' }).click();
+  await page.getByRole('button', { name: 'Delete' }).click();
+});
