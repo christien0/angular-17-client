@@ -43,31 +43,7 @@ pipeline {
         stage('Run Integration Tests') {
             steps {
                 script {
-                    // Step 1: Clean up everything first
-                    bat '''
-                        echo Cleaning up previous containers...
-                        docker-compose -f docker-compose.test.yml down -v 2>nul || echo No previous containers to clean
-                        docker stop to-do-front-backend-1 to-do-front-frontend-1 2>nul || echo No containers to stop
-                        docker rm to-do-front-backend-1 to-do-front-frontend-1 2>nul || echo No containers to remove
-                    '''
-                    
-                    // Step 2: Kill processes using ports 8080 and 8081
-                    bat '''
-                        echo Checking for processes using ports 8080 and 8081...
-                        for /f "tokens=5" %%p in ('netstat -ano ^| findstr :8080') do (
-                            echo Killing process %%p using port 8080
-                            taskkill /F /PID %%p 2>nul
-                        )
-                        for /f "tokens=5" %%p in ('netstat -ano ^| findstr :8081') do (
-                            echo Killing process %%p using port 8081
-                            taskkill /F /PID %%p 2>nul
-                        )
-                    '''
-                    
-                    // Step 3: Pull backend image
-                    bat 'docker pull christienmushoriwa/todoback:latest'
-                    
-                    // Step 4: Create docker-compose with health checks
+                    // Step 1: Create docker-compose file FIRST
                     writeFile file: 'docker-compose.test.yml', text: """
 services:
   backend:
@@ -90,10 +66,36 @@ services:
         condition: service_healthy
 """
                     
+                    // Step 2: Clean up everything using the created file
+                    bat '''
+                        echo Cleaning up previous containers...
+                        if exist docker-compose.test.yml (
+                            docker-compose -f docker-compose.test.yml down -v 2>nul || echo No previous containers to clean
+                        ) else (
+                            echo docker-compose.test.yml not found, skipping cleanup
+                        )
+                    '''
+                    
+                    // Step 3: Kill processes using ports 8080 and 8081
+                    bat '''
+                        echo Checking for processes using ports 8080 and 8081...
+                        for /f "tokens=5" %%p in ('netstat -ano ^| findstr :8080') do (
+                            echo Killing process %%p using port 8080
+                            taskkill /F /PID %%p 2>nul
+                        )
+                        for /f "tokens=5" %%p in ('netstat -ano ^| findstr :8081') do (
+                            echo Killing process %%p using port 8081
+                            taskkill /F /PID %%p 2>nul
+                        )
+                    '''
+                    
+                    // Step 4: Pull backend image
+                    bat 'docker pull christienmushoriwa/todoback:latest'
+                    
                     // Step 5: Start services
                     bat 'docker-compose -f docker-compose.test.yml up -d'
                     
-                    // Step 6: Wait using PowerShell (reliable)
+                    // Step 6: Wait using PowerShell
                     bat 'powershell -Command "Write-Host ''Waiting for services to start...''; Start-Sleep -Seconds 45"'
                     
                     // Step 7: Check container status
@@ -101,15 +103,16 @@ services:
                         echo Container status:
                         docker ps
                         echo Backend logs:
-                        docker logs to-do-front-backend-1
+                        docker logs to-do-front-backend-1 2>nul || echo Cannot get backend logs yet
                         echo Frontend logs:
-                        docker logs to-do-front-frontend-1
+                        docker logs to-do-front-frontend-1 2>nul || echo Cannot get frontend logs yet
                     '''
                     
                     // Step 8: Wait for backend to be ready
                     bat '''
                         echo Waiting for backend to be ready...
                         set RETRY_COUNT=0
+                        set MAX_RETRIES=15
                         :CHECK_BACKEND
                         curl -f http://localhost:8080/api/tutorials > nul 2>&1
                         if !errorlevel! equ 0 (
@@ -117,12 +120,12 @@ services:
                             goto BACKEND_READY
                         )
                         set /a RETRY_COUNT+=1
-                        if !RETRY_COUNT! geq 15 (
+                        if !RETRY_COUNT! geq !MAX_RETRIES! (
                             echo ERROR: Backend not ready after 150 seconds
-                            docker logs to-do-front-backend-1
+                            docker logs to-do-front-backend-1 2>nul || echo Cannot get backend logs
                             exit 1
                         )
-                        echo Backend not ready yet, retrying in 10 seconds... (!RETRY_COUNT!/15)
+                        echo Backend not ready yet, retrying in 10 seconds... (!RETRY_COUNT!/!MAX_RETRIES!)
                         powershell -Command "Start-Sleep -Seconds 10"
                         goto CHECK_BACKEND
                         :BACKEND_READY
@@ -132,6 +135,7 @@ services:
                     bat '''
                         echo Waiting for frontend to be ready...
                         set RETRY_COUNT=0
+                        set MAX_RETRIES=15
                         :CHECK_FRONTEND
                         curl -f http://localhost:8081/tutorials > nul 2>&1
                         if !errorlevel! equ 0 (
@@ -139,12 +143,12 @@ services:
                             goto FRONTEND_READY
                         )
                         set /a RETRY_COUNT+=1
-                        if !RETRY_COUNT! geq 15 (
+                        if !RETRY_COUNT! geq !MAX_RETRIES! (
                             echo ERROR: Frontend not ready after 150 seconds
-                            docker logs to-do-front-frontend-1
+                            docker logs to-do-front-frontend-1 2>nul || echo Cannot get frontend logs
                             exit 1
                         )
-                        echo Frontend not ready yet, retrying in 10 seconds... (!RETRY_COUNT!/15)
+                        echo Frontend not ready yet, retrying in 10 seconds... (!RETRY_COUNT!/!MAX_RETRIES!)
                         powershell -Command "Start-Sleep -Seconds 10"
                         goto CHECK_FRONTEND
                         :FRONTEND_READY
@@ -153,15 +157,15 @@ services:
                     // Step 10: Final health check
                     bat '''
                         echo Final health check:
-                        curl -f http://localhost:8080/api/tutorials && echo Backend API: OK
-                        curl -f http://localhost:8081/tutorials && echo Frontend: OK
+                        curl http://localhost:8080/api/tutorials && echo Backend API: OK || echo Backend API: FAILED
+                        curl http://localhost:8081/tutorials && echo Frontend: OK || echo Frontend: FAILED
                     '''
                     
-                    // Step 11: Run tests (NO PORT MODIFICATION NEEDED)
+                    // Step 11: Run tests
                     bat '''
                         echo Installing Playwright...
                         npx playwright install
-                        echo Running tests...
+                        echo Running tests against http://localhost:8081...
                         npx playwright test test-1.spec.ts --reporter=list
                     '''
                 }
@@ -172,15 +176,18 @@ services:
                         // Capture logs
                         bat '''
                             echo === BACKEND LOGS ===
-                            docker logs to-do-front-backend-1 > backend.log 2>&1
-                            type backend.log
+                            docker logs to-do-front-backend-1 > backend.log 2>&1 && type backend.log || echo No backend logs available
                             echo === FRONTEND LOGS ===
-                            docker logs to-do-front-frontend-1 > frontend.log 2>&1
-                            type frontend.log
+                            docker logs to-do-front-frontend-1 > frontend.log 2>&1 && type frontend.log || echo No frontend logs available
                         '''
                         
                         // Cleanup
-                        bat 'docker-compose -f docker-compose.test.yml down -v'
+                        bat '''
+                            if exist docker-compose.test.yml (
+                                docker-compose -f docker-compose.test.yml down -v
+                            )
+                            del docker-compose.test.yml 2>nul || echo Cannot delete compose file
+                        '''
                     }
                 }
             }
