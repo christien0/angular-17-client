@@ -55,12 +55,12 @@ services:
   backend:
     image: christienmushoriwa/todoback:latest
     ports:
-      - "18080:8080"
+      - "8080:8080"
 
   frontend:
     image: christienmushoriwa/todofront:latest
     ports:
-      - "18081:80"
+      - "8081:80"
     depends_on:
       - backend
 """
@@ -80,7 +80,7 @@ services:
                         set MAX_RETRIES=12
                         set RETRY_COUNT=0
                         :RETRY_BACKEND
-                        curl -f http://localhost:18080/api/tutorials > nul
+                        curl -f http://localhost:8080/api/tutorials > nul
                         if !errorlevel! == 0 (
                             echo Backend API is ready!
                             goto BACKEND_READY
@@ -103,7 +103,7 @@ services:
                         set MAX_RETRIES=12
                         set RETRY_COUNT=0
                         :RETRY_FRONTEND
-                        curl -f http://localhost:18081/tutorials > nul
+                        curl -f http://localhost:8081/tutorials > nul
                         if !errorlevel! == 0 (
                             echo Frontend is ready!
                             goto FRONTEND_READY
