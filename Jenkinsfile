@@ -73,7 +73,7 @@ services:
       - backend
 """
 
-                    // Pull backend image and start services - FIXED: Use bat with double quotes for env var expansion
+                    // Pull backend image and start services
                     bat """
                         echo "=== STEP 3: PULLING BACKEND IMAGE AND STARTING SERVICES ==="
                         docker pull ${DOCKER_USER}/${BACKEND_APP_NAME}:${IMAGE_TAG}
@@ -91,7 +91,7 @@ services:
                         curl -f http://localhost:8081/tutorials && echo "✓ FRONTEND OK" || exit /b 1
                     '''
 
-                    // Create a basic Playwright test file if it doesn't exist
+                    // Create Playwright test file
                     writeFile file: 'test-1.spec.ts', text: """
 import { test, expect } from '@playwright/test';
 
@@ -159,7 +159,7 @@ export default defineConfig({
 });
 """
 
-                    // Run Playwright tests with proper setup
+                    // Install and run Playwright tests - FIXED: Added missing test execution
                     bat """
                         echo "=== STEP 6: INSTALLING PLAYWRIGHT ==="
                         npm install -D @playwright/test
