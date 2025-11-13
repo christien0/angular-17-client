@@ -103,14 +103,9 @@ services:
                         npx playwright test --list
                         
                         echo "=== STEP 9: RUNNING PLAYWRIGHT TESTS ==="
-                        npx playwright test --reporter=html,junit,list || echo "Tests completed with exit code: %ERRORLEVEL%"
+                        npx playwright test --reporter=html,junit,list
                         
-                        echo "=== STEP 10: CHECKING TEST RESULTS ==="
-                        if exist playwright-report\\results.xml (
-                            echo "JUnit report generated successfully"
-                        ) else (
-                            echo "No JUnit report found"
-                        )
+                        echo "=== STEP 10: TEST EXECUTION COMPLETE ==="
                     """
                 }
             }
