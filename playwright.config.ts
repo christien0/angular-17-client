@@ -11,10 +11,10 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:8081',
     trace: 'on-first-retry',
-    // Add these for better visibility
-    headless: false, // Show browser windows
-    screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    // For Jenkins - use headless mode but capture visual evidence
+    headless: true, // Changed to true for Jenkins compatibility
+    screenshot: 'on', // Capture screenshots for all tests
+    video: 'on', // Record videos for all tests
   },
   
   projects: [
@@ -22,22 +22,23 @@ export default defineConfig({
       name: 'chromium', 
       use: { 
         ...devices['Desktop Chrome'],
-        viewport: { width: 1280, height: 720 } // Consistent window size
-      } 
-    },
-    { 
-      name: 'firefox', 
-      use: { 
-        ...devices['Desktop Firefox'],
         viewport: { width: 1280, height: 720 }
       } 
     },
-    { 
-      name: 'webkit', 
-      use: { 
-        ...devices['Desktop Safari'],
-        viewport: { width: 1280, height: 720 }
-      } 
-    },
+    // Comment out other browsers for faster execution in CI
+    // { 
+    //   name: 'firefox', 
+    //   use: { 
+    //     ...devices['Desktop Firefox'],
+    //     viewport: { width: 1280, height: 720 }
+    //   } 
+    // },
+    // { 
+    //   name: 'webkit', 
+    //   use: { 
+    //     ...devices['Desktop Safari'],
+    //     viewport: { width: 1280, height: 720 }
+    //   } 
+    // },
   ],
 });
