@@ -91,7 +91,7 @@ services:
                         curl -f http://localhost:8081/tutorials && echo "✓ FRONTEND OK" || exit /b 1
                     '''
 
-                    // Install and run Playwright tests - FIXED: Added actual test execution
+                    // Install and run Playwright tests
                     bat """
                         echo "=== STEP 6: INSTALLING PLAYWRIGHT ==="
                         call npm install -D @playwright/test
