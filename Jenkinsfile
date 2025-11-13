@@ -91,84 +91,19 @@ services:
                         curl -f http://localhost:8081/tutorials && echo "✓ FRONTEND OK" || exit /b 1
                     '''
 
-                    // Create Playwright test file - FIXED: Use .js extension instead of .ts
-                    writeFile file: 'test-1.spec.js', text: """
-const { test, expect } = require('@playwright/test');
-
-test('frontend application loads', async ({ page }) => {
-  console.log('Navigating to frontend...');
-  await page.goto('http://localhost:8081');
-  
-  // Wait for the app to load
-  await page.waitForTimeout(5000);
-  
-  // Check if the page title is correct
-  const title = await page.title();
-  expect(title).toBe('Angular17Crud');
-  
-  console.log('Frontend loaded successfully');
-});
-
-test('backend API is accessible', async ({ request }) => {
-  console.log('Testing backend API...');
-  const response = await request.get('http://localhost:8080/api/tutorials');
-  expect(response.status()).toBe(200);
-  
-  const responseBody = await response.json();
-  console.log('Backend API response received');
-});
-
-test('frontend tutorials page loads', async ({ page }) => {
-  console.log('Testing tutorials page...');
-  await page.goto('http://localhost:8081/tutorials');
-  
-  // Wait for page to load
-  await page.waitForTimeout(3000);
-  
-  // Take a screenshot for debugging
-  await page.screenshot({ path: 'tutorials-page.png' });
-  console.log('Tutorials page test completed');
-});
-"""
-
-                    // Create Playwright config file - FIXED: Use .js extension
-                    writeFile file: 'playwright.config.js', text: """
-const { defineConfig, devices } = require('@playwright/test');
-
-module.exports = defineConfig({
-  testDir: '.',
-  timeout: 30000,
-  expect: {
-    timeout: 5000
-  },
-  reporter: [
-    ['html', { outputFolder: 'playwright-report' }],
-    ['junit', { outputFile: 'playwright-report/results.xml' }]
-  ],
-  use: {
-    baseURL: 'http://localhost:8081',
-    trace: 'on-first-retry',
-    screenshot: 'only-on-failure'
-  },
-  projects: [
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
-    }
-  ],
-});
-"""
-
-                    // Install and run Playwright tests - FIXED: Multiple critical issues
+                    // Install and run Playwright tests - USING YOUR EXISTING TESTS
                     bat """
                         echo "=== STEP 6: INSTALLING PLAYWRIGHT ==="
                         call npm install -D @playwright/test
                         
                         echo "=== STEP 7: INSTALLING BROWSERS ==="
-                        call npx playwright install --with-deps
+                        call npx playwright install
                         
-                        echo "=== STEP 8: RUNNING PLAYWRIGHT TESTS ==="
-                        call npx playwright test test-1.spec.js --reporter=html,junit || echo "Tests completed with exit code: %ERRORLEVEL%"
+                        echo "=== STEP 8: VERIFYING TESTS ARE FOUND ==="
+                        npx playwright test --list
+                        
+                        echo "=== STEP 9: RUNNING PLAYWRIGHT TESTS ==="
+                        npx playwright test --reporter=html,junit,list
                     """
                 }
             }
@@ -176,7 +111,7 @@ module.exports = defineConfig({
             post {
                 always {
                     echo "=== ARCHIVING TEST RESULTS AND CLEANING UP ==="
-                    // Archive JUnit test results - FIXED: Check if file exists first
+                    // Archive JUnit test results
                     script {
                         def testResults = findFiles(glob: 'playwright-report/results.xml')
                         if (testResults.length > 0) {
@@ -186,7 +121,7 @@ module.exports = defineConfig({
                         }
                     }
 
-                    // Archive HTML report and screenshots - FIXED: Better artifact handling
+                    // Archive HTML report and screenshots
                     script {
                         def reportFiles = findFiles(glob: 'playwright-report/**/*')
                         def screenshotFiles = findFiles(glob: '*.png')
@@ -197,7 +132,7 @@ module.exports = defineConfig({
                         }
                     }
 
-                    // Publish HTML report - FIXED: Handle missing reports gracefully
+                    // Publish HTML report
                     script {
                         def htmlReport = findFiles(glob: 'playwright-report/index.html')
                         if (htmlReport.length > 0) {
