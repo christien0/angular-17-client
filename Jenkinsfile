@@ -102,8 +102,9 @@ services:
                         echo "=== STEP 8: VERIFYING TESTS ARE FOUND ==="
                         npx playwright test --list
                         
-                        echo "=== STEP 9: RUNNING PLAYWRIGHT TESTS ==="
-                        npx playwright test --reporter=html,junit,list
+                        echo "=== STEP 9: RUNNING PLAYWRIGHT TESTS IN HEADED MODE ==="
+                        set PWDEBUG=1
+                        npx playwright test --headed --reporter=html,junit,list
                     """
                 }
             }
