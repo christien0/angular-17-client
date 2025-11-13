@@ -9,7 +9,7 @@ pipeline {
     }
 
     triggers {
-        pollSCM('H/1 * * * *') // poll every 5 minutes
+        pollSCM('H/1 * * * *') // poll every minute
     }
 
     stages {
@@ -50,13 +50,13 @@ pipeline {
         stage('Run Integration & Regression Tests') {
             steps {
                 script {
-                    // Cleanup old containers and volumes
+                    // Cleanup old containers
                     bat '''
-                        echo "=== STEP 1: CLEANING UP OLD CONTAINERS ==="
+                        echo "=== CLEANING UP OLD CONTAINERS ==="
                         docker-compose -f docker-compose.test.yml down -v 2>nul || echo Cleanup done
                     '''
 
-                    // Dynamically write docker-compose.test.yml for backend & frontend images
+                    // Write docker-compose.test.yml dynamically
                     writeFile file: 'docker-compose.test.yml', text: """
 version: '3.8'
 services:
@@ -75,37 +75,35 @@ services:
 
                     // Pull backend image and start services
                     bat """
-                        echo "=== STEP 3: PULLING BACKEND IMAGE AND STARTING SERVICES ==="
+                        echo "=== STARTING DOCKER SERVICES ==="
                         docker pull ${DOCKER_USER}/${BACKEND_APP_NAME}:${IMAGE_TAG}
                         docker-compose -f docker-compose.test.yml up -d
                     """
 
-                    // Wait 30 seconds for services to start
+                    // Wait for services to be ready
                     bat 'powershell -Command "Start-Sleep -Seconds 30"'
 
-                    // Verify services are running
+                    // Verify backend/frontend health
                     bat '''
-                        echo "=== STEP 5: VERIFYING SERVICES ==="
+                        echo "=== VERIFYING SERVICES ==="
                         docker ps
                         curl -f http://localhost:8080/api/tutorials && echo "✓ BACKEND OK" || exit /b 1
                         curl -f http://localhost:8081/tutorials && echo "✓ FRONTEND OK" || exit /b 1
                     '''
 
-                    // Install and run Playwright tests
+                    // Install Playwright and browsers
                     bat """
-                        echo "=== STEP 6: INSTALLING PLAYWRIGHT ==="
+                        echo "=== INSTALLING PLAYWRIGHT ==="
                         call npm install -D @playwright/test
-                        
-                        echo "=== STEP 7: INSTALLING BROWSERS ==="
+
+                        echo "=== INSTALLING BROWSERS ==="
                         call npx playwright install
-                        
-                        echo "=== STEP 8: VERIFYING TESTS ARE FOUND ==="
-                        npx playwright test --list
-                        
-                        echo "=== STEP 9: RUNNING PLAYWRIGHT TESTS ==="
-                        npx playwright test --reporter=html,junit,list
-                        
-                        echo "=== STEP 10: TEST EXECUTION COMPLETE ==="
+                    """
+
+                    // Run Playwright tests
+                    bat """
+                        echo "=== RUNNING PLAYWRIGHT TESTS ==="
+                        npx playwright test --reporter=html,junit
                     """
                 }
             }
@@ -113,24 +111,25 @@ services:
             post {
                 always {
                     echo "=== ARCHIVING TEST RESULTS AND CLEANING UP ==="
+
                     // Archive JUnit test results
                     script {
-                        def testResults = findFiles(glob: 'playwright-report/results.xml')
-                        if (testResults.length > 0) {
+                        def junitFiles = findFiles(glob: 'playwright-report/results.xml')
+                        if (junitFiles.length > 0) {
                             junit 'playwright-report/results.xml'
                         } else {
-                            echo "No test result files found to archive"
+                            echo "No JUnit test results found"
                         }
                     }
 
-                    // Archive HTML report and screenshots
+                    // Archive HTML reports and screenshots
                     script {
-                        def reportFiles = findFiles(glob: 'playwright-report/**/*')
-                        def screenshotFiles = findFiles(glob: 'test-results/**/*.png')
-                        if (reportFiles.length > 0 || screenshotFiles.length > 0) {
+                        def reports = findFiles(glob: 'playwright-report/**/*')
+                        def screenshots = findFiles(glob: 'test-results/**/*.png')
+                        if (reports.length > 0 || screenshots.length > 0) {
                             archiveArtifacts artifacts: 'playwright-report/**/*, test-results/**/*', fingerprint: true
                         } else {
-                            echo "No report files or screenshots found to archive"
+                            echo "No HTML reports or screenshots to archive"
                         }
                     }
 
